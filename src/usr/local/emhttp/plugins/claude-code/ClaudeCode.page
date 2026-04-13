@@ -28,11 +28,11 @@ $server = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
 $server_host = preg_replace('/:\d+$/', '', $server);
 $terminal_url = "http://{$server_host}:{$port}";
 
-// Check if Claude binary exists
+// Check if Claude binary exists (on flash for persistence, runtime for execution)
 $claude_installed = file_exists("/boot/config/plugins/{$plugin}/bin/claude");
 $claude_version = '';
-if ($claude_installed) {
-  $claude_version = trim(shell_exec("/boot/config/plugins/{$plugin}/bin/claude --version 2>&1") ?? '');
+if ($claude_installed && file_exists("/usr/local/bin/claude")) {
+  $claude_version = trim(shell_exec("/usr/local/bin/claude --version 2>&1") ?? '');
 }
 ?>
 

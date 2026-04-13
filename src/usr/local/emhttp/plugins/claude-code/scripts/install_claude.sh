@@ -9,8 +9,9 @@
 PLUGIN_NAME="claude-code"
 FLASH_DIR="/boot/config/plugins/${PLUGIN_NAME}"
 BIN_DIR="${FLASH_DIR}/bin"
-CLAUDE_BIN="${BIN_DIR}/claude"
-SYMLINK="/usr/local/bin/claude"
+FLASH_BIN="${BIN_DIR}/claude"
+# The USB flash is mounted noexec, so we must copy to a RAM-based path to run
+RUNTIME_BIN="/usr/local/bin/claude"
 
 log() {
   echo "[${PLUGIN_NAME}] $1"
@@ -19,17 +20,16 @@ log() {
 # Create persistent bin directory on USB flash
 mkdir -p "${BIN_DIR}"
 
-# Check if we already have the binary and it's working
-if [ -x "${CLAUDE_BIN}" ]; then
-  if "${CLAUDE_BIN}" --version >/dev/null 2>&1; then
-    log "Claude Code is already installed: $(${CLAUDE_BIN} --version 2>&1)"
-    # Ensure symlink exists
-    ln -sf "${CLAUDE_BIN}" "${SYMLINK}"
-    log "Symlink verified at ${SYMLINK}"
+# If we have the binary on flash, copy it to the runtime path and verify
+if [ -f "${FLASH_BIN}" ]; then
+  cp "${FLASH_BIN}" "${RUNTIME_BIN}"
+  chmod +x "${RUNTIME_BIN}"
+  if "${RUNTIME_BIN}" --version >/dev/null 2>&1; then
+    log "Claude Code is already installed: $(${RUNTIME_BIN} --version 2>&1)"
     exit 0
   else
     log "Existing binary is broken, reinstalling..."
-    rm -f "${CLAUDE_BIN}"
+    rm -f "${FLASH_BIN}" "${RUNTIME_BIN}"
   fi
 fi
 
@@ -63,10 +63,13 @@ if curl -fsSL https://claude.ai/install.sh | CLAUDE_CODE_SKIP_POSTINSTALL=1 bash
   fi
 
   if [ -n "${INSTALLED_BIN}" ] && [ -x "${INSTALLED_BIN}" ]; then
-    # Copy to persistent location (don't move - installer may expect it there)
-    cp "${INSTALLED_BIN}" "${CLAUDE_BIN}"
-    chmod +x "${CLAUDE_BIN}"
-    log "Claude Code binary saved to ${CLAUDE_BIN}"
+    # Save to flash for persistence across reboots
+    cp "${INSTALLED_BIN}" "${FLASH_BIN}"
+    log "Claude Code binary saved to ${FLASH_BIN}"
+    # Copy to runtime path (flash is noexec)
+    cp "${INSTALLED_BIN}" "${RUNTIME_BIN}"
+    chmod +x "${RUNTIME_BIN}"
+    log "Claude Code binary installed to ${RUNTIME_BIN}"
   else
     log "ERROR: Installer ran but binary not found"
     exit 1
@@ -76,13 +79,9 @@ else
   exit 1
 fi
 
-# Create symlink in PATH
-ln -sf "${CLAUDE_BIN}" "${SYMLINK}"
-log "Symlink created at ${SYMLINK}"
-
 # Verify
-if "${CLAUDE_BIN}" --version >/dev/null 2>&1; then
-  log "Installation successful: $(${CLAUDE_BIN} --version 2>&1)"
+if "${RUNTIME_BIN}" --version >/dev/null 2>&1; then
+  log "Installation successful: $(${RUNTIME_BIN} --version 2>&1)"
 else
   log "WARNING: Binary installed but --version check failed. It may still work."
 fi

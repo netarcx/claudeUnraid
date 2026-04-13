@@ -8,9 +8,10 @@ CFGFILE="/boot/config/plugins/claude-code/claude-code.cfg"
 if [ -f "${CFGFILE}" ]; then
   source "${CFGFILE}"
   if [ "${SERVICE}" = "enable" ]; then
-    # Ensure symlink exists for Claude binary
-    if [ -x "/boot/config/plugins/claude-code/bin/claude" ]; then
-      ln -sf "/boot/config/plugins/claude-code/bin/claude" "/usr/local/bin/claude"
+    # Copy Claude binary from flash (noexec) to runtime path
+    if [ -f "/boot/config/plugins/claude-code/bin/claude" ]; then
+      cp "/boot/config/plugins/claude-code/bin/claude" "/usr/local/bin/claude"
+      chmod +x "/usr/local/bin/claude"
     fi
     /etc/rc.d/rc.claude-code start
   fi

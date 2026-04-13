@@ -9,8 +9,9 @@
 PLUGIN_NAME="claude-code"
 CFGFILE="/boot/config/plugins/${PLUGIN_NAME}/${PLUGIN_NAME}.cfg"
 PIDFILE="/var/run/${PLUGIN_NAME}.pid"
-CLAUDE_BIN="/boot/config/plugins/${PLUGIN_NAME}/bin/claude"
-SYMLINK="/usr/local/bin/claude"
+FLASH_BIN="/boot/config/plugins/${PLUGIN_NAME}/bin/claude"
+# USB flash is mounted noexec — binary must run from a RAM-based path
+RUNTIME_BIN="/usr/local/bin/claude"
 
 # Source configuration
 if [ -f "${CFGFILE}" ]; then
@@ -39,18 +40,21 @@ start() {
     return 0
   fi
 
-  # Ensure Claude binary is available
-  if [ ! -x "${CLAUDE_BIN}" ]; then
-    echo "Claude Code binary not found. Running installer..."
-    /usr/local/emhttp/plugins/${PLUGIN_NAME}/scripts/install_claude.sh
-    if [ ! -x "${CLAUDE_BIN}" ]; then
-      echo "ERROR: Failed to install Claude Code"
-      return 1
+  # Ensure Claude binary is available at runtime path
+  if [ ! -x "${RUNTIME_BIN}" ]; then
+    if [ -f "${FLASH_BIN}" ]; then
+      # Copy from flash (which is noexec) to runtime path
+      cp "${FLASH_BIN}" "${RUNTIME_BIN}"
+      chmod +x "${RUNTIME_BIN}"
+    else
+      echo "Claude Code binary not found. Running installer..."
+      /usr/local/emhttp/plugins/${PLUGIN_NAME}/scripts/install_claude.sh
+      if [ ! -x "${RUNTIME_BIN}" ]; then
+        echo "ERROR: Failed to install Claude Code"
+        return 1
+      fi
     fi
   fi
-
-  # Ensure symlink exists
-  ln -sf "${CLAUDE_BIN}" "${SYMLINK}"
 
   # Ensure workspace exists
   if [ ! -d "${WORKSPACE}" ]; then
@@ -85,7 +89,7 @@ start() {
     -t fontSize=14 \
     -t 'fontFamily="JetBrains Mono","Fira Code","Cascadia Code","Courier New",monospace' \
     -t 'theme={"background":"#1a1b26","foreground":"#c0caf5","cursor":"#c0caf5","selectionBackground":"#33467c"}' \
-    "${CLAUDE_BIN}" \
+    "${RUNTIME_BIN}" \
     >/var/log/${PLUGIN_NAME}.log 2>&1 &
 
   local pid=$!
@@ -146,8 +150,8 @@ status() {
 
 update() {
   echo "Updating Claude Code..."
-  # Remove existing binary to force reinstall
-  rm -f "${CLAUDE_BIN}" "${SYMLINK}"
+  # Remove existing binaries to force reinstall
+  rm -f "${FLASH_BIN}" "${RUNTIME_BIN}"
   /usr/local/emhttp/plugins/${PLUGIN_NAME}/scripts/install_claude.sh
   if is_running; then
     echo "Restarting service with updated binary..."

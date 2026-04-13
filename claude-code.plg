@@ -65,13 +65,14 @@ chmod +x &plugdir;/event/started/&name;
 chmod +x &plugdir;/event/stopped/&name;
 
 # Install Claude Code binary if not already present
-if [ ! -x &flash;/bin/claude ]; then
+if [ ! -f &flash;/bin/claude ]; then
   echo "Installing Claude Code binary (first time setup)..."
   &plugdir;/scripts/install_claude.sh
 else
-  # Ensure symlink exists
-  ln -sf &flash;/bin/claude /usr/local/bin/claude
-  echo "Claude Code binary already installed"
+  # Copy from flash (noexec) to runtime path
+  cp &flash;/bin/claude /usr/local/bin/claude
+  chmod +x /usr/local/bin/claude
+  echo "Claude Code binary already installed, copied to runtime path"
 fi
 
 # Start service if enabled
@@ -94,7 +95,7 @@ echo "--- Removing Claude Code plugin ---"
 # Stop service
 /etc/rc.d/rc.&name; stop 2>/dev/null
 
-# Remove symlink
+# Remove runtime binary
 rm -f /usr/local/bin/claude
 
 # Remove package
