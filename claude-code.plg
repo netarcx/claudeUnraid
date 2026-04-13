@@ -1,0 +1,113 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "claude-code">
+  <!ENTITY author    "netarcx">
+  <!ENTITY version   "2025.04.13">
+  <!ENTITY launch    "Settings/ClaudeCode">
+  <!ENTITY plugdir   "/usr/local/emhttp/plugins/&name;">
+  <!ENTITY github    "netarcx/claudeUnraid">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+  <!ENTITY flash     "/boot/config/plugins/&name;">
+  <!ENTITY txzURL    "https://raw.githubusercontent.com/&github;/main/archive/&name;.txz">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;"
+  launch="&launch;" pluginURL="&pluginURL;" min="6.12.0"
+  icon="terminal"
+  support="https://github.com/&github;/issues">
+
+<CHANGES>
+### 2025.04.13
+- Initial release
+- Web-based terminal for Claude Code via ttyd
+- Settings page with API key management, port config, workspace selection
+- Auto-start on array start support
+- Embedded terminal iframe in Unraid web UI
+</CHANGES>
+
+<!-- Pre-install: stop existing service and remove old package -->
+<FILE Run="/bin/bash" Method="install">
+<INLINE>
+echo "--- Pre-install cleanup ---"
+# Stop service if running
+if [ -f /etc/rc.d/rc.claude-code ]; then
+  /etc/rc.d/rc.claude-code stop 2>/dev/null
+fi
+# Remove old package
+removepkg &name; 2>/dev/null
+echo "--- Pre-install cleanup complete ---"
+</INLINE>
+</FILE>
+
+<!-- Download and install plugin package -->
+<FILE Name="&flash;/&name;.txz" Run="upgradepkg --install-new">
+<URL>&txzURL;</URL>
+</FILE>
+
+<!-- Post-install: create default config and install Claude Code -->
+<FILE Run="/bin/bash" Method="install">
+<INLINE>
+echo "--- Post-install setup ---"
+
+# Create config directory on flash
+mkdir -p &flash;/bin
+
+# Create default config if it doesn't exist
+if [ ! -f &flash;/&name;.cfg ]; then
+  cp &plugdir;/default.cfg &flash;/&name;.cfg
+  echo "Default configuration created"
+fi
+
+# Set permissions
+chmod +x /etc/rc.d/rc.&name;
+chmod +x &plugdir;/scripts/install_claude.sh
+chmod +x &plugdir;/event/started/&name;
+chmod +x &plugdir;/event/stopped/&name;
+
+# Install Claude Code binary if not already present
+if [ ! -x &flash;/bin/claude ]; then
+  echo "Installing Claude Code binary (first time setup)..."
+  &plugdir;/scripts/install_claude.sh
+else
+  # Ensure symlink exists
+  ln -sf &flash;/bin/claude /usr/local/bin/claude
+  echo "Claude Code binary already installed"
+fi
+
+# Start service if enabled
+source &flash;/&name;.cfg 2>/dev/null
+if [ "${SERVICE}" = "enable" ]; then
+  echo "Auto-starting Claude Code service..."
+  /etc/rc.d/rc.&name; start
+fi
+
+echo "--- Claude Code plugin installed successfully ---"
+echo "Navigate to Settings -> Utilities -> Claude Code to configure"
+</INLINE>
+</FILE>
+
+<!-- Removal script -->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+echo "--- Removing Claude Code plugin ---"
+
+# Stop service
+/etc/rc.d/rc.&name; stop 2>/dev/null
+
+# Remove symlink
+rm -f /usr/local/bin/claude
+
+# Remove package
+removepkg &name; 2>/dev/null
+
+# Remove plugin directory
+rm -rf &plugdir;
+
+# Remove flash config and binaries
+rm -rf &flash;
+
+echo "--- Claude Code plugin removed ---"
+</INLINE>
+</FILE>
+
+</PLUGIN>

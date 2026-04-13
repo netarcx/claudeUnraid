@@ -1,0 +1,291 @@
+Menu="Utilities"
+Title="Claude Code"
+Icon="terminal"
+---
+<?php
+$plugin = "claude-code";
+$cfg_file = "/boot/config/plugins/{$plugin}/{$plugin}.cfg";
+$default_cfg = "/usr/local/emhttp/plugins/{$plugin}/default.cfg";
+
+// Load defaults then user config
+$cfg = parse_ini_file($default_cfg) ?: [];
+if (file_exists($cfg_file)) {
+  $cfg = array_merge($cfg, parse_ini_file($cfg_file) ?: []);
+}
+
+$service   = $cfg['SERVICE']   ?? 'disable';
+$port      = $cfg['PORT']      ?? '7682';
+$workspace = $cfg['WORKSPACE'] ?? '/mnt/user/';
+$api_key   = $cfg['API_KEY']   ?? '';
+
+// Get service status
+$status = trim(shell_exec("/etc/rc.d/rc.{$plugin} status 2>/dev/null") ?? 'stopped');
+$running = ($status === 'running');
+
+// Get server IP/hostname for terminal URL
+$server = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
+// Strip port from host if present
+$server_host = preg_replace('/:\d+$/', '', $server);
+$terminal_url = "http://{$server_host}:{$port}";
+
+// Check if Claude binary exists
+$claude_installed = file_exists("/boot/config/plugins/{$plugin}/bin/claude");
+$claude_version = '';
+if ($claude_installed) {
+  $claude_version = trim(shell_exec("/boot/config/plugins/{$plugin}/bin/claude --version 2>&1") ?? '');
+}
+?>
+
+<link type="text/css" rel="stylesheet" href="<?autov('/webGui/styles/jquery.ui.css')?>">
+<style>
+.claude-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 14px;
+}
+.claude-status.running {
+  background: #1a3a1a;
+  color: #4caf50;
+}
+.claude-status.stopped {
+  background: #3a1a1a;
+  color: #f44336;
+}
+.claude-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.running .claude-status-dot { background: #4caf50; }
+.stopped .claude-status-dot { background: #f44336; }
+
+.claude-actions {
+  margin: 16px 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.claude-actions button {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+.claude-actions button:hover { opacity: 0.85; }
+.claude-actions .btn-start   { background: #4caf50; color: #fff; }
+.claude-actions .btn-stop    { background: #f44336; color: #fff; }
+.claude-actions .btn-restart { background: #ff9800; color: #fff; }
+.claude-actions .btn-update  { background: #2196f3; color: #fff; }
+
+.claude-terminal-wrapper {
+  margin: 20px 0;
+  border: 2px solid #333;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1b26;
+}
+.claude-terminal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: #24283b;
+  border-bottom: 1px solid #333;
+  color: #c0caf5;
+  font-size: 13px;
+}
+.claude-terminal-header a {
+  color: #7aa2f7;
+  text-decoration: none;
+  font-size: 12px;
+}
+.claude-terminal-header a:hover { text-decoration: underline; }
+.claude-terminal-iframe {
+  width: 100%;
+  height: 600px;
+  border: none;
+}
+.claude-terminal-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: #565f89;
+  font-size: 16px;
+}
+
+.claude-info {
+  margin: 10px 0;
+  padding: 10px 14px;
+  background: #1a1b2e;
+  border-left: 3px solid #7aa2f7;
+  border-radius: 0 4px 4px 0;
+  font-size: 13px;
+  color: #a9b1d6;
+}
+</style>
+
+<div style="margin-bottom: 24px;">
+  <span class="claude-status <?=$running ? 'running' : 'stopped'?>">
+    <span class="claude-status-dot"></span>
+    <?=$running ? 'Running' : 'Stopped'?>
+  </span>
+  <?php if ($claude_installed && $claude_version): ?>
+    <span style="margin-left: 16px; color: #a9b1d6; font-size: 13px;">
+      Claude Code <?=htmlspecialchars($claude_version)?>
+    </span>
+  <?php elseif (!$claude_installed): ?>
+    <span style="margin-left: 16px; color: #f44336; font-size: 13px;">
+      Claude Code binary not installed
+    </span>
+  <?php endif; ?>
+</div>
+
+<div class="claude-actions">
+  <?php if ($running): ?>
+    <button class="btn-stop" onclick="doAction('stop')">Stop</button>
+    <button class="btn-restart" onclick="doAction('restart')">Restart</button>
+  <?php else: ?>
+    <button class="btn-start" onclick="doAction('start')">Start</button>
+  <?php endif; ?>
+  <button class="btn-update" onclick="doAction('update')">
+    <?=$claude_installed ? 'Update Claude Code' : 'Install Claude Code'?>
+  </button>
+</div>
+
+<!-- Embedded Terminal -->
+<?php if ($running): ?>
+<div class="claude-terminal-wrapper">
+  <div class="claude-terminal-header">
+    <span>Claude Code Terminal</span>
+    <a href="<?=htmlspecialchars($terminal_url)?>" target="_blank">Open in new tab &#x2197;</a>
+  </div>
+  <iframe class="claude-terminal-iframe" src="<?=htmlspecialchars($terminal_url)?>"></iframe>
+</div>
+<?php else: ?>
+<div class="claude-terminal-wrapper">
+  <div class="claude-terminal-placeholder">
+    Start the service to access the Claude Code terminal
+  </div>
+</div>
+<?php endif; ?>
+
+<div style="height: 24px;"></div>
+
+<!-- Settings Form -->
+<form id="claude-settings" method="POST">
+  <table class="tablesorter shift ups">
+    <thead>
+      <tr><th colspan="2">Claude Code Settings</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="width: 200px;">Anthropic API Key:</td>
+        <td>
+          <input type="password" id="api_key" name="API_KEY"
+                 value="<?=htmlspecialchars($api_key)?>"
+                 style="width: 400px;" placeholder="sk-ant-...">
+          <button type="button" onclick="toggleApiKey()" style="margin-left: 8px; cursor: pointer;">Show/Hide</button>
+          <?php if (empty($api_key)): ?>
+            <span style="color: #f44336; margin-left: 8px; font-size: 12px;">Required</span>
+          <?php endif; ?>
+        </td>
+      </tr>
+      <tr>
+        <td>Web Terminal Port:</td>
+        <td>
+          <input type="number" name="PORT" value="<?=htmlspecialchars($port)?>"
+                 min="1024" max="65535" style="width: 100px;">
+          <span style="color: #565f89; margin-left: 8px; font-size: 12px;">Default: 7682</span>
+        </td>
+      </tr>
+      <tr>
+        <td>Workspace Path:</td>
+        <td>
+          <input type="text" name="WORKSPACE" value="<?=htmlspecialchars($workspace)?>"
+                 style="width: 400px;" placeholder="/mnt/user/">
+          <span style="color: #565f89; margin-left: 8px; font-size: 12px;">
+            Claude Code will start in this directory
+          </span>
+        </td>
+      </tr>
+      <tr>
+        <td>Start with Array:</td>
+        <td>
+          <select name="SERVICE">
+            <option value="enable" <?=$service === 'enable' ? 'selected' : ''?>>Yes</option>
+            <option value="disable" <?=$service !== 'enable' ? 'selected' : ''?>>No</option>
+          </select>
+          <span style="color: #565f89; margin-left: 8px; font-size: 12px;">
+            Automatically start when the Unraid array starts
+          </span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <div style="margin-top: 12px;">
+    <button type="button" class="btn-start" onclick="saveSettings()"
+            style="padding: 8px 24px; font-size: 14px;">Apply</button>
+    <button type="button" onclick="resetSettings()"
+            style="padding: 8px 24px; font-size: 14px; background: #555; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin-left: 8px;">Reset</button>
+  </div>
+</form>
+
+<div class="claude-info" style="margin-top: 20px;">
+  <strong>Note:</strong> Your API key is stored on the USB flash drive at
+  <code>/boot/config/plugins/claude-code/claude-code.cfg</code> and is only accessible to root.
+  The Claude Code binary is persisted at
+  <code>/boot/config/plugins/claude-code/bin/claude</code> so it survives reboots.
+</div>
+
+<script>
+function toggleApiKey() {
+  var input = document.getElementById('api_key');
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function doAction(action) {
+  var btns = document.querySelectorAll('.claude-actions button');
+  btns.forEach(function(b) { b.disabled = true; b.style.opacity = '0.5'; });
+
+  $.post('/plugins/claude-code/include/exec.php', {action: action}, function(data) {
+    setTimeout(function() { location.reload(); }, 2000);
+  }).fail(function() {
+    alert('Action failed. Check the system log.');
+    btns.forEach(function(b) { b.disabled = false; b.style.opacity = '1'; });
+  });
+}
+
+function saveSettings() {
+  var formData = $('#claude-settings').serialize();
+  $.post('/plugins/claude-code/include/update.php', formData, function(data) {
+    if (data && data.error) {
+      alert('Error: ' + data.error);
+    } else {
+      setTimeout(function() { location.reload(); }, 2000);
+    }
+  }).fail(function() {
+    alert('Failed to save settings.');
+  });
+}
+
+function resetSettings() {
+  if (confirm('Reset all settings to defaults? This will stop the service if running.')) {
+    $.post('/plugins/claude-code/include/exec.php', {action: 'stop'}, function() {
+      $.post('/plugins/claude-code/include/update.php', {
+        SERVICE: 'disable', PORT: '7682', WORKSPACE: '/mnt/user/', API_KEY: ''
+      }, function() {
+        location.reload();
+      });
+    });
+  }
+}
+</script>

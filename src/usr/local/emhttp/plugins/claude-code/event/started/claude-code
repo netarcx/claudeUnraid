@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# Auto-start Claude Code web terminal when the Unraid array starts
+#
+
+CFGFILE="/boot/config/plugins/claude-code/claude-code.cfg"
+
+if [ -f "${CFGFILE}" ]; then
+  source "${CFGFILE}"
+  if [ "${SERVICE}" = "enable" ]; then
+    # Ensure symlink exists for Claude binary
+    if [ -x "/boot/config/plugins/claude-code/bin/claude" ]; then
+      ln -sf "/boot/config/plugins/claude-code/bin/claude" "/usr/local/bin/claude"
+    fi
+    /etc/rc.d/rc.claude-code start
+  fi
+fi

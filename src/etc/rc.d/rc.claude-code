@@ -1,0 +1,168 @@
+#!/bin/bash
+#
+# rc.claude-code - Service management for Claude Code web terminal
+#
+# Manages a ttyd process that wraps the Claude Code CLI,
+# providing a web-based terminal interface.
+#
+
+PLUGIN_NAME="claude-code"
+CFGFILE="/boot/config/plugins/${PLUGIN_NAME}/${PLUGIN_NAME}.cfg"
+PIDFILE="/var/run/${PLUGIN_NAME}.pid"
+CLAUDE_BIN="/boot/config/plugins/${PLUGIN_NAME}/bin/claude"
+SYMLINK="/usr/local/bin/claude"
+
+# Source configuration
+if [ -f "${CFGFILE}" ]; then
+  source "${CFGFILE}"
+fi
+
+# Defaults
+PORT="${PORT:-7682}"
+WORKSPACE="${WORKSPACE:-/mnt/user/}"
+API_KEY="${API_KEY:-}"
+
+is_running() {
+  if [ -f "${PIDFILE}" ]; then
+    local pid
+    pid=$(cat "${PIDFILE}" 2>/dev/null)
+    if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+start() {
+  if is_running; then
+    echo "${PLUGIN_NAME} is already running (PID $(cat ${PIDFILE}))"
+    return 0
+  fi
+
+  # Ensure Claude binary is available
+  if [ ! -x "${CLAUDE_BIN}" ]; then
+    echo "Claude Code binary not found. Running installer..."
+    /usr/local/emhttp/plugins/${PLUGIN_NAME}/scripts/install_claude.sh
+    if [ ! -x "${CLAUDE_BIN}" ]; then
+      echo "ERROR: Failed to install Claude Code"
+      return 1
+    fi
+  fi
+
+  # Ensure symlink exists
+  ln -sf "${CLAUDE_BIN}" "${SYMLINK}"
+
+  # Ensure workspace exists
+  if [ ! -d "${WORKSPACE}" ]; then
+    echo "WARNING: Workspace directory ${WORKSPACE} does not exist, using /mnt/user/"
+    WORKSPACE="/mnt/user/"
+  fi
+
+  # Check if ttyd is available
+  if ! command -v ttyd >/dev/null 2>&1; then
+    echo "ERROR: ttyd not found. It should be included with Unraid."
+    return 1
+  fi
+
+  echo "Starting Claude Code web terminal on port ${PORT}..."
+
+  # Build the environment for the ttyd session
+  ENV_ARGS=""
+  if [ -n "${API_KEY}" ]; then
+    ENV_ARGS="ANTHROPIC_API_KEY=${API_KEY}"
+  fi
+
+  # Launch ttyd in the background
+  # -W: writable (allows user input)
+  # -p: port
+  # -t: terminal options
+  # -B: allow browser to connect from any origin
+  cd "${WORKSPACE}"
+  nohup env ${ENV_ARGS} ttyd \
+    -p "${PORT}" \
+    -W \
+    -B \
+    -t fontSize=14 \
+    -t 'fontFamily="JetBrains Mono","Fira Code","Cascadia Code","Courier New",monospace' \
+    -t 'theme={"background":"#1a1b26","foreground":"#c0caf5","cursor":"#c0caf5","selectionBackground":"#33467c"}' \
+    "${CLAUDE_BIN}" \
+    >/var/log/${PLUGIN_NAME}.log 2>&1 &
+
+  local pid=$!
+  echo "${pid}" > "${PIDFILE}"
+
+  # Wait briefly and verify it started
+  sleep 1
+  if is_running; then
+    echo "${PLUGIN_NAME} started successfully (PID ${pid}, port ${PORT})"
+  else
+    echo "ERROR: ${PLUGIN_NAME} failed to start. Check /var/log/${PLUGIN_NAME}.log"
+    rm -f "${PIDFILE}"
+    return 1
+  fi
+}
+
+stop() {
+  if ! is_running; then
+    echo "${PLUGIN_NAME} is not running"
+    rm -f "${PIDFILE}"
+    return 0
+  fi
+
+  local pid
+  pid=$(cat "${PIDFILE}" 2>/dev/null)
+  echo "Stopping ${PLUGIN_NAME} (PID ${pid})..."
+
+  # Send SIGTERM first, then SIGKILL if needed
+  kill "${pid}" 2>/dev/null
+  local count=0
+  while kill -0 "${pid}" 2>/dev/null && [ ${count} -lt 10 ]; do
+    sleep 1
+    count=$((count + 1))
+  done
+
+  if kill -0 "${pid}" 2>/dev/null; then
+    echo "Force killing ${PLUGIN_NAME}..."
+    kill -9 "${pid}" 2>/dev/null
+  fi
+
+  rm -f "${PIDFILE}"
+  echo "${PLUGIN_NAME} stopped"
+}
+
+restart() {
+  stop
+  sleep 1
+  start
+}
+
+status() {
+  if is_running; then
+    echo "running"
+  else
+    echo "stopped"
+  fi
+}
+
+update() {
+  echo "Updating Claude Code..."
+  # Remove existing binary to force reinstall
+  rm -f "${CLAUDE_BIN}" "${SYMLINK}"
+  /usr/local/emhttp/plugins/${PLUGIN_NAME}/scripts/install_claude.sh
+  if is_running; then
+    echo "Restarting service with updated binary..."
+    restart
+  fi
+}
+
+case "$1" in
+  start)   start ;;
+  stop)    stop ;;
+  restart) restart ;;
+  status)  status ;;
+  update)  update ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status|update}"
+    exit 1
+    ;;
+esac

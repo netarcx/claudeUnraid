@@ -1,0 +1,6 @@
+#!/bin/bash
+#
+# Stop Claude Code web terminal when the Unraid array stops
+#
+
+/etc/rc.d/rc.claude-code stop 2>/dev/null

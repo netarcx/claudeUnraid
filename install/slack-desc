@@ -1,0 +1,12 @@
+       |-----handy-ruler------------------------------------------------------|
+claude-code: claude-code (Claude Code for Unraid)
+claude-code:
+claude-code: Run Anthropic's Claude Code CLI directly on your Unraid server
+claude-code: with a web-based terminal interface. Provides an embedded terminal
+claude-code: in the Unraid web UI powered by ttyd, with configurable API key,
+claude-code: port, and workspace settings.
+claude-code:
+claude-code:
+claude-code:
+claude-code: https://github.com/netarcx/claudeUnraid
+claude-code:
