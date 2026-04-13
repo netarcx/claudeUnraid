@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "claude-code">
   <!ENTITY author    "netarcx">
-  <!ENTITY version   "2025.04.13">
+  <!ENTITY version   "2025.04.13a">
   <!ENTITY launch    "Settings/ClaudeCode">
   <!ENTITY plugdir   "/usr/local/emhttp/plugins/&name;">
   <!ENTITY github    "netarcx/claudeUnraid">
@@ -17,6 +17,10 @@
   support="https://github.com/&github;/issues">
 
 <CHANGES>
+### 2025.04.13a
+- Fix: copy Claude binary to RAM path (/usr/local/bin/) since USB flash is mounted noexec
+- Force re-download of .txz on reinstall
+
 ### 2025.04.13
 - Initial release
 - Web-based terminal for Claude Code via ttyd
@@ -35,6 +39,8 @@ if [ -f /etc/rc.d/rc.claude-code ]; then
 fi
 # Remove old package
 removepkg &name; 2>/dev/null
+# Delete cached .txz so the new version is downloaded fresh
+rm -f &flash;/&name;.txz
 echo "--- Pre-install cleanup complete ---"
 </INLINE>
 </FILE>
